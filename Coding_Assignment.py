@@ -11,9 +11,12 @@ import geopandas as gpd
 import earthpy as et
 import earthpy.plot as ep
 import gdal
+from gdalconst import GA_ReadOnly
 import rasterio as rio
 from rasterio.plot import plotting_extent
 import earthpy.spatial as es
+from WBT.whitebox_tools import WhiteboxTools
+wbt = WhiteboxTools()
 
 # can be used once the code is written and working to stop warnings popping up to the user
 # warnings.simplefilter('ignore')
@@ -38,7 +41,7 @@ output_scene_path = os.path.join("/SRS_Processing_Data", 'output')
 #files = [i for i in os.listdir(output_scene_path) if os.path.isfile(os.path.join(output_scene_path, i))]
 #print (files)
 
-#Make a list of all the reflectance .tif files and sort by band number
+#Make a list of all the reflectance .tif file names and sort by band number
 ASTER_band_list = [i for i in os.listdir(output_scene_path) if os.path.isfile(os.path.join(output_scene_path,i)) and \
                    'reflectance' in i]
 ASTER_band_list.sort()
@@ -63,19 +66,30 @@ b9 = ASTER_band_list1 [8]
 
 # not working - arr_st, meta = es.stack(ASTER_band_list1)
 
-from WBT.whitebox_tools import WhiteboxTools
-wbt = WhiteboxTools()
-
-
-""" wbt.resample(
+# Resample bands to same resolution using white box tools nn = nearest neighbour
+wbt.resample(
     b7,
-    (b7 + '_resampled.tif'),
-    cell_size=15,
-    base=None,
-    method="bilinear",
+    (b7 + '_resampled_WBT.tif'),
+    cell_size=None,
+    base=b1,
+    method="nn",
 )
-"""
-gdal.Warp((b7 + '_resampled.tif'), b7, xRes=7.5, yRes=7.5)
+
+# Resample bands to same resolution, does the same as above but shifts the pixel by half its size
+#gdal.Warp((b7 + '_resampled_gdal.tif'), b7, xRes=15, yRes=15)
+
+# Crop/clip images to b1 size
+clipArea = gdal.Open(b1, GA_ReadOnly)
+projection=clipArea.GetProjectionRef()
+geoTransform = clipArea.GetGeoTransform()
+minx = geoTransform[0]
+maxy = geoTransform[3]
+maxx = minx + geoTransform[1] * clipArea.RasterXSize
+miny = maxy + geoTransform[5] * clipArea.RasterYSize
+
+data=gdal.Open('C:\SRS_Processing_Data\output\AST_L1T_00303052001084132_20150501094701_93840_ImageData7_reflectance.tif_resampled.tif', GA_ReadOnly) #Your data the one you want to clip ##need to add in here the path to the file
+output='output.tif' #output file
+gdal.Translate(output,data,format='GTiff',projWin=[minx,maxy,maxx,miny],outputSRS=projection)
 
 # Open bands in GDAL as datasets 'db1'
 db1 = gdal.Open(b1)
@@ -84,7 +98,7 @@ db3 = gdal.Open(b3)
 db4 = gdal.Open(b4)
 db5 = gdal.Open(b5)
 db6 = gdal.Open(b6)
-db7 = gdal.Open(b7)
+db7 = gdal.Open('output.tif')
 db8 = gdal.Open(b8)
 db9 = gdal.Open(b9)
 
@@ -105,7 +119,7 @@ a1 = band1.ReadAsArray()
 img721 = np.dstack((a7, a2, a1))
 f = plt.figure()
 plt.imshow(img721)
-plt.savefig('721.png')
+plt.savefig('721.tif')
 plt.show()
 
 
